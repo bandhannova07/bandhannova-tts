@@ -6,8 +6,8 @@ import os
 class Config:
     # Server Configuration
     HOST = '0.0.0.0'
-    PORT = 5000
-    DEBUG = True
+    PORT = int(os.environ.get('PORT', 5000))
+    DEBUG = os.environ.get('FLASK_1ENV') == 'development'
     
     # Audio Configuration
     SAMPLE_RATE = 22050

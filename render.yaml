@@ -1,11 +1,10 @@
 services:
   - type: web
     name: tts-service
-    env: python
+    env: docker
     region: oregon
     rootDir: "."
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn app:app"
+    plan: free
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.0"
+      - key: PORT
+        value: "5000"
