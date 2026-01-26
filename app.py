@@ -149,15 +149,28 @@ def generate_speech():
         speed = max(config.MIN_SPEED, min(config.MAX_SPEED, speed))
         pitch = max(config.MIN_PITCH, min(config.MAX_PITCH, pitch))
         
-        logger.info(f"Generating speech: lang={language}, speed={speed}, pitch={pitch}")
+        # Determine voice_id for Human-like TTS (Edge TTS)
+        voice_profile = data.get('voice_profile')
+        voice_id = None
+        
+        if voice_profile:
+            if voice_profile in config.VOICE_PROFILES:
+                voice_id = config.VOICE_PROFILES[voice_profile]
+            else:
+                 logger.warning(f"Voice profile {voice_profile} not found in config.")
+        
+        logger.info(f"Generating speech: lang={language}, speed={speed}, pitch={pitch}, voice={voice_profile}, id={voice_id}")
         
         # Generate speech
         engine = get_engine()
         audio_path = engine.generate_speech(
             text=text,
             language=language,
-            speed=speed
+            speed=speed,
+            voice_id=voice_id
         )
+        
+        # Skip pitch shift and enhancement for now (requires ffmpeg)
         
         # Skip pitch shift and enhancement for now (requires ffmpeg)
         # Just serve the generated MP3 file directly

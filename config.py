@@ -116,3 +116,20 @@ class Config:
     
     # Output Configuration
     OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output')
+    
+    # Voice Profiles (Human-like settings)
+    # Using Edge TTS Neural Voices
+    VOICE_PROFILES = {
+        'bn_male': 'bn-BD-PradeepNeural',
+        'bn_female': 'bn-IN-TanishaaNeural', 
+        'hi_male': 'hi-IN-MadhurNeural',
+        'hi_female': 'hi-IN-SwaraNeural',
+        'en_male': 'en-US-ChristopherNeural',
+        'en_female': 'en-US-AriaNeural'
+    }
+    
+    # Prosody Default Settings
+    # Edge TTS supports rate and pitch changes
+    DEFAULT_RATE = "+0%"
+    DEFAULT_PITCH = "+0Hz"
+
