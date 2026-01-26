@@ -19,79 +19,46 @@ class Config:
         'bn': {
             'name': 'Bengali',
             'code': 'bn',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
             'flag': '🇮🇳'
         },
         'hi': {
             'name': 'Hindi',
             'code': 'hi',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
-            'flag': '🇮🇳'
-        },
-        'mr': {
-            'name': 'Marathi',
-            'code': 'mr',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
-            'flag': '🇮🇳'
-        },
-        'gu': {
-            'name': 'Gujarati',
-            'code': 'gu',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
-            'flag': '🇮🇳'
-        },
-        'kn': {
-            'name': 'Kannada',
-            'code': 'kn',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
-            'flag': '🇮🇳'
-        },
-        'ml': {
-            'name': 'Malayalam',
-            'code': 'ml',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
-            'flag': '🇮🇳'
-        },
-        'pa': {
-            'name': 'Punjabi',
-            'code': 'pa',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
-            'flag': '🇮🇳'
-        },
-        'ur': {
-            'name': 'Urdu',
-            'code': 'ur',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
-            'flag': '🇮🇳'
-        },
-        'or': {
-            'name': 'Odia',
-            'code': 'or',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
-            'flag': '🇮🇳'
-        },
-        'as': {
-            'name': 'Assamese',
-            'code': 'as',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
             'flag': '🇮🇳'
         },
         'ta': {
             'name': 'Tamil',
             'code': 'ta',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
             'flag': '🇮🇳'
         },
         'te': {
             'name': 'Telugu',
             'code': 'te',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
+            'flag': '🇮🇳'
+        },
+        'mr': {
+            'name': 'Marathi',
+            'code': 'mr',
+            'flag': '🇮🇳'
+        },
+        'gu': {
+            'name': 'Gujarati',
+            'code': 'gu',
+            'flag': '🇮🇳'
+        },
+        'kn': {
+            'name': 'Kannada',
+            'code': 'kn',
+            'flag': '🇮🇳'
+        },
+        'ml': {
+            'name': 'Malayalam',
+            'code': 'ml',
             'flag': '🇮🇳'
         },
         'en': {
             'name': 'English',
             'code': 'en',
-            'model': 'tts_models/multilingual/multi-dataset/xtts_v2',
             'flag': '🇬🇧'
         }
     }
@@ -120,12 +87,41 @@ class Config:
     # Voice Profiles (Human-like settings)
     # Using Edge TTS Neural Voices
     VOICE_PROFILES = {
+        # Bengali
         'bn_male': 'bn-BD-PradeepNeural',
         'bn_female': 'bn-IN-TanishaaNeural', 
+        
+        # Hindi
         'hi_male': 'hi-IN-MadhurNeural',
         'hi_female': 'hi-IN-SwaraNeural',
-        'en_male': 'en-US-ChristopherNeural',
-        'en_female': 'en-US-AriaNeural'
+        
+        # Tamil
+        'ta_male': 'ta-IN-ValluvarNeural',
+        'ta_female': 'ta-IN-PallaviNeural',
+        
+        # Telugu
+        'te_male': 'te-IN-MohanNeural',
+        'te_female': 'te-IN-ShrutiNeural',
+        
+        # Marathi
+        'mr_male': 'mr-IN-ManoharNeural',
+        'mr_female': 'mr-IN-AarohiNeural',
+        
+        # Gujarati
+        'gu_male': 'gu-IN-NiranjanNeural',
+        'gu_female': 'gu-IN-DhwaniNeural',
+        
+        # Kannada
+        'kn_male': 'kn-IN-GaganNeural',
+        'kn_female': 'kn-IN-SapnaNeural',
+        
+        # Malayalam
+        'ml_male': 'ml-IN-MidhunNeural',
+        'ml_female': 'ml-IN-SobhanaNeural',
+        
+        # English (India)
+        'en_male': 'en-IN-PrabhatNeural',
+        'en_female': 'en-IN-NeerjaNeural'
     }
     
     # Prosody Default Settings

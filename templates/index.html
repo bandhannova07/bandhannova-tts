@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,10 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <!-- Background Animation -->
     <div class="background-animation">
@@ -41,11 +44,7 @@
             <!-- Text Input -->
             <div class="input-section">
                 <label for="textInput">Enter Your Text</label>
-                <textarea 
-                    id="textInput" 
-                    placeholder="Type or paste your text here..."
-                    maxlength="5000"
-                ></textarea>
+                <textarea id="textInput" placeholder="Type or paste your text here..." maxlength="5000"></textarea>
                 <div class="char-counter">
                     <span id="charCount">0</span> / 5000 characters
                 </div>
@@ -54,7 +53,7 @@
             <!-- Voice Customization -->
             <div class="customization-section">
                 <h3>Voice Customization</h3>
-                
+
                 <div class="controls-grid">
                     <!-- Speed Control -->
                     <div class="control-group">
@@ -62,15 +61,7 @@
                             <span>Speed</span>
                             <span class="control-value" id="speedValue">1.0x</span>
                         </label>
-                        <input 
-                            type="range" 
-                            id="speedControl" 
-                            min="0.5" 
-                            max="2.0" 
-                            step="0.1" 
-                            value="1.0"
-                            class="slider"
-                        >
+                        <input type="range" id="speedControl" min="0.5" max="2.0" step="0.1" value="1.0" class="slider">
                         <div class="slider-labels">
                             <span>Slow</span>
                             <span>Normal</span>
@@ -84,15 +75,7 @@
                             <span>Pitch</span>
                             <span class="control-value" id="pitchValue">0</span>
                         </label>
-                        <input 
-                            type="range" 
-                            id="pitchControl" 
-                            min="-20" 
-                            max="20" 
-                            step="1" 
-                            value="0"
-                            class="slider"
-                        >
+                        <input type="range" id="pitchControl" min="-20" max="20" step="1" value="0" class="slider">
                         <div class="slider-labels">
                             <span>Low</span>
                             <span>Normal</span>
@@ -122,13 +105,13 @@
                         <span>⬇️</span> Download
                     </button>
                 </div>
-                
+
                 <div class="waveform-container">
                     <canvas id="waveform"></canvas>
                 </div>
-                
+
                 <audio id="audioElement" controls></audio>
-                
+
                 <div class="audio-info">
                     <span id="audioLanguage"></span>
                     <span id="audioDuration"></span>
@@ -168,10 +151,17 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>Powered by Coqui TTS • Made with ❤️ for Indian Languages</p>
+            <p>Made with ❤️ for Indian Languages</p>
         </footer>
     </div>
 
+    <script>
+        window.TTS_CONFIG = {
+            apiKey: "{{ api_key }}",
+            serverUrl: window.location.origin
+        };
+    </script>
     <script src="/static/js/app.js"></script>
 </body>
+
 </html>

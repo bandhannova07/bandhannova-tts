@@ -8,7 +8,7 @@ import logging
 from tts_engine import get_tts_engine
 from audio_processor import AudioProcessor
 from config import Config
-from api_keys import create_api_key, is_valid_key
+from api_keys import create_api_key, is_valid_key, get_first_key
 import traceback
 
 # Initialize Flask app
@@ -51,7 +51,13 @@ def get_engine():
 @app.route('/')
 def index():
     """Serve the main page"""
-    return render_template('index.html')
+    # Get a valid API key for the frontend
+    api_key = get_first_key()
+    if not api_key:
+        # Create one if missing/deleted
+        api_key = create_api_key(label="public_web")
+        
+    return render_template('index.html', api_key=api_key)
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -104,9 +110,167 @@ def create_key():
             'error': str(e)
         }), 500
 
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+def get_voice_id(lang_code, gender):
+    """Get Voice ID based on language code and gender"""
+    if not gender:
+        gender = 'female' # Default to female
+    
+    gender = gender.lower()
+    if gender not in ['male', 'female']:
+        gender = 'female'
+        
+    key = f"{lang_code}_{gender}"
+    return config.VOICE_PROFILES.get(key)
+
+from io import BytesIO
+
+def process_generate_request(text, lang_code, speed, pitch, gender):
+    """Common logic for processing generation request"""
+    # Validate input
+    if not text:
+        return jsonify({
+            'success': False,
+            'error': 'Text cannot be empty'
+        }), 400
+    
+    if len(text) > config.MAX_TEXT_LENGTH:
+        return jsonify({
+            'success': False,
+            'error': f'Text too long. Maximum {config.MAX_TEXT_LENGTH} characters allowed'
+        }), 400
+    
+    # Validate speed and pitch
+    speed = max(config.MIN_SPEED, min(config.MAX_SPEED, speed))
+    pitch = max(config.MIN_PITCH, min(config.MAX_PITCH, pitch))
+    
+    # Get Voice ID
+    voice_id = get_voice_id(lang_code, gender)
+    
+    logger.info(f"Generating speech: lang={lang_code}, gender={gender}, voice_id={voice_id}, speed={speed}")
+    
+    # Generate speech (Get bytes)
+    engine = get_engine()
+    try:
+        audio_content, mimetype = engine.generate_speech(
+            text=text,
+            language=lang_code,
+            speed=speed,
+            voice_id=voice_id,
+            return_bytes=True
+        )
+        
+        # Return audio stream
+        return send_file(
+            BytesIO(audio_content),
+            mimetype=mimetype,
+            as_attachment=False,
+            download_name=f'speech_{lang_code}.mp3'
+        )
+    except Exception as e:
+        logger.error(f"Generation failed: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/<language_name>/<gender>/generate', methods=['POST'])
+def generate_by_language_and_gender(language_name, gender):
+    """
+    Generate speech using language and gender in URL 
+    e.g. /bengali/male/generate
+    """
+    try:
+        auth_error = _require_api_key(request)
+        if auth_error:
+            return auth_error
+            
+        # Find language code from name
+        language_name = language_name.lower()
+        lang_code = None
+        
+        for code, info in config.SUPPORTED_LANGUAGES.items():
+            if info['name'].lower() == language_name:
+                lang_code = code
+                break
+        
+        if not lang_code:
+            return jsonify({
+                'success': False,
+                'error': f"Language '{language_name}' not supported"
+            }), 404
+            
+        # Validate gender from URL
+        gender = gender.lower()
+        if gender not in ['male', 'female']:
+            return jsonify({
+                'success': False,
+                'error': "Gender must be 'male' or 'female'"
+            }), 400
+            
+        # Get request data for text/speed/pitch
+        data = request.get_json(silent=True) or {}
+        text = data.get('text', '').strip()
+        speed = float(data.get('speed', 1.0))
+        pitch = int(data.get('pitch', 0))
+        
+        # URL gender overrides JSON gender if both provided (URL is source of truth here)
+        
+        return process_generate_request(text, lang_code, speed, pitch, gender)
+
+    except Exception as e:
+        logger.error(f"Error in language/gender route: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/<language_name>/generate', methods=['POST'])
+def generate_by_language_name(language_name):
+    """Generate speech using language name in URL (e.g. /bengali/generate)"""
+    try:
+        auth_error = _require_api_key(request)
+        if auth_error:
+            return auth_error
+            
+        # Find language code from name
+        language_name = language_name.lower()
+        lang_code = None
+        
+        for code, info in config.SUPPORTED_LANGUAGES.items():
+            if info['name'].lower() == language_name:
+                lang_code = code
+                break
+        
+        if not lang_code:
+            return jsonify({
+                'success': False,
+                'error': f"Language '{language_name}' not supported"
+            }), 404
+            
+        # Get request data
+        data = request.get_json(silent=True) or {}
+        text = data.get('text', '').strip()
+        speed = float(data.get('speed', 1.0))
+        pitch = int(data.get('pitch', 0))
+        gender = data.get('gender', 'female')
+        
+        return process_generate_request(text, lang_code, speed, pitch, gender)
+
+    except Exception as e:
+        logger.error(f"Error in language route: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/generate', methods=['POST'])
 def generate_speech():
-    """Generate speech from text"""
+    """Generate speech from text (Legacy/Generic Endpoint)"""
     try:
         auth_error = _require_api_key(request)
         if auth_error:
@@ -126,65 +290,20 @@ def generate_speech():
         speed = float(data.get('speed', 1.0))
         pitch = int(data.get('pitch', 0))
         
-        # Validate input
-        if not text:
-            return jsonify({
-                'success': False,
-                'error': 'Text cannot be empty'
-            }), 400
+        # New parameter: gender
+        gender = data.get('gender', 'female')
         
-        if len(text) > config.MAX_TEXT_LENGTH:
-            return jsonify({
-                'success': False,
-                'error': f'Text too long. Maximum {config.MAX_TEXT_LENGTH} characters allowed'
-            }), 400
+        # Check if voice_profile is passed (legacy support)
+        # If voice_profile is passed, we might ignore gender logic, or try to decode it
+        # But for consistency, let's use the new logic if language is supported
         
         if language not in config.SUPPORTED_LANGUAGES:
             return jsonify({
                 'success': False,
                 'error': f'Language {language} not supported'
             }), 400
-        
-        # Validate speed and pitch
-        speed = max(config.MIN_SPEED, min(config.MAX_SPEED, speed))
-        pitch = max(config.MIN_PITCH, min(config.MAX_PITCH, pitch))
-        
-        # Determine voice_id for Human-like TTS (Edge TTS)
-        voice_profile = data.get('voice_profile')
-        voice_id = None
-        
-        if voice_profile:
-            if voice_profile in config.VOICE_PROFILES:
-                voice_id = config.VOICE_PROFILES[voice_profile]
-            else:
-                 logger.warning(f"Voice profile {voice_profile} not found in config.")
-        
-        logger.info(f"Generating speech: lang={language}, speed={speed}, pitch={pitch}, voice={voice_profile}, id={voice_id}")
-        
-        # Generate speech
-        engine = get_engine()
-        audio_path = engine.generate_speech(
-            text=text,
-            language=language,
-            speed=speed,
-            voice_id=voice_id
-        )
-        
-        # Skip pitch shift and enhancement for now (requires ffmpeg)
-        
-        # Skip pitch shift and enhancement for now (requires ffmpeg)
-        # Just serve the generated MP3 file directly
-        
-        # Determine mimetype
-        mimetype = 'audio/mpeg' if audio_path.endswith('.mp3') else 'audio/wav'
-        
-        # Return audio file
-        return send_file(
-            audio_path,
-            mimetype=mimetype,
-            as_attachment=False,
-            download_name=f'speech_{language}.mp3'
-        )
+            
+        return process_generate_request(text, language, speed, pitch, gender)
         
     except Exception as e:
         logger.error(f"Error generating speech: {e}")

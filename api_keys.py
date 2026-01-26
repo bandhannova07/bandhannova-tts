@@ -41,3 +41,10 @@ def is_valid_key(key):
     with _LOCK:
         keys = _load_keys()
         return key in keys
+
+def get_first_key():
+    with _LOCK:
+        keys = _load_keys()
+        if keys:
+            return list(keys.keys())[0]
+    return None
