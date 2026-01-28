@@ -38,11 +38,22 @@ def create_api_key(label="public"):
 def is_valid_key(key):
     if not key:
         return False
+        
+    # Check for hardcoded master key from environment variables (persistent across redeploys)
+    master_key = os.environ.get("API_KEY")
+    if master_key and key == master_key:
+        return True
+        
     with _LOCK:
         keys = _load_keys()
         return key in keys
 
 def get_first_key():
+    # Prefer environment variable key if set
+    master_key = os.environ.get("API_KEY")
+    if master_key:
+        return master_key
+        
     with _LOCK:
         keys = _load_keys()
         if keys:
