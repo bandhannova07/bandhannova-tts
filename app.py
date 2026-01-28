@@ -159,8 +159,9 @@ def get_voice_id(lang_code, gender):
     return config.VOICE_PROFILES.get(key)
 
 from io import BytesIO
+from flask import Response
 
-def process_generate_request(text, lang_code, speed, pitch, gender):
+def process_generate_request(text, lang_code, speed, pitch, gender, stream=False):
     """Common logic for processing generation request"""
     # Validate input
     if not text:
@@ -182,12 +183,34 @@ def process_generate_request(text, lang_code, speed, pitch, gender):
     # Get Voice ID
     voice_id = get_voice_id(lang_code, gender)
     
-    logger.info(f"📝 Request: lang={lang_code}, gender={gender}, speed={speed}")
+    logger.info(f"📝 Request: lang={lang_code}, gender={gender}, speed={speed}, stream={stream}")
     logger.info(f"   Voice ID selected: {voice_id}")
     logger.info(f"   Text length: {len(text)} chars")
     
-    # Generate speech (Get bytes)
     engine = get_engine()
+    
+    # --- Option 1: Streaming Response (Low Latency) ---
+    if stream:
+        try:
+            return Response(
+                engine.generate_speech_stream(
+                    text=text,
+                    language=lang_code,
+                    speed=speed,
+                    voice_id=voice_id
+                ),
+                mimetype='audio/mpeg',
+                headers={
+                    'Content-Disposition': f'inline; filename="speech_{lang_code}.mp3"',
+                    'Cache-Control': 'no-cache'
+                }
+            )
+        except Exception as e:
+            logger.error(f"Streaming failed: {e}")
+            # Fallback to non-streaming if requested stream fails
+            pass
+
+    # --- Option 2: Full Buffer Response (Standard) ---
     try:
         audio_content, mimetype = engine.generate_speech(
             text=text,
@@ -206,7 +229,6 @@ def process_generate_request(text, lang_code, speed, pitch, gender):
         )
     except Exception as e:
         logger.error(f"Generation failed: {e}")
-        logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/<language_name>/<gender>/generate', methods=['POST'])
@@ -248,11 +270,12 @@ def generate_by_language_and_gender(language_name, gender):
         text = data.get('text', '').strip()
         speed = float(data.get('speed', 1.0))
         pitch = int(data.get('pitch', 0))
+        stream = data.get('stream', True)  # Default to TRUE for better UX
         
         # URL gender overrides JSON gender if both provided (URL is source of truth here)
         logger.info(f"🌐 Endpoint: /{language_name}/{gender}/generate")
         
-        return process_generate_request(text, lang_code, speed, pitch, gender)
+        return process_generate_request(text, lang_code, speed, pitch, gender, stream=stream)
 
     except Exception as e:
         logger.error(f"Error in language/gender route: {e}")
@@ -291,8 +314,9 @@ def generate_by_language_name(language_name):
         speed = float(data.get('speed', 1.0))
         pitch = int(data.get('pitch', 0))
         gender = data.get('gender', 'female')
+        stream = data.get('stream', True)  # Default to TRUE
         
-        return process_generate_request(text, lang_code, speed, pitch, gender)
+        return process_generate_request(text, lang_code, speed, pitch, gender, stream=stream)
 
     except Exception as e:
         logger.error(f"Error in language route: {e}")
@@ -323,9 +347,8 @@ def generate_speech():
         language = data.get('language', 'en')
         speed = float(data.get('speed', 1.0))
         pitch = int(data.get('pitch', 0))
-        
-        # New parameter: gender
         gender = data.get('gender', 'female')
+        stream = data.get('stream', True)  # Default to TRUE
         
         # Check if voice_profile is passed (legacy support)
         # If voice_profile is passed, we might ignore gender logic, or try to decode it
@@ -337,7 +360,7 @@ def generate_speech():
                 'error': f'Language {language} not supported'
             }), 400
             
-        return process_generate_request(text, language, speed, pitch, gender)
+        return process_generate_request(text, language, speed, pitch, gender, stream=stream)
         
     except Exception as e:
         logger.error(f"Error generating speech: {e}")

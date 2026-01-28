@@ -293,6 +293,95 @@ class TTSEngine:
         except Exception as e:
             logger.error(f"Offline TTS also failed: {e}")
             raise
+
+    def generate_speech_stream(self, text, language='en', speed=1.0, voice_id=None):
+        """
+        Generator function that yields audio chunks for streaming.
+        Uses Edge TTS library directly for real-time responsiveness.
+        """
+        if not text or len(text.strip()) == 0:
+             return
+
+        # 1. Normalization (using the fixed pronunciation)
+        normalized_text = normalize_text(text, language)
+        if normalized_text != text:
+            logger.info(f"📝 Streaming Text normalized: {text[:20]}... -> {normalized_text[:20]}...")
+            text = normalized_text
+
+        # 2. Caching Check
+        if self.config.ENABLE_CACHE:
+            cache_path = self._get_cache_path(text, language, voice_id, speed)
+            if os.path.exists(cache_path):
+                logger.info(f"⚡ Cache hit (streaming)! Serving: {text[:20]}...")
+                with open(cache_path, "rb") as f:
+                    while True:
+                        chunk = f.read(8192) # 8KB chunks
+                        if not chunk:
+                            break
+                        yield chunk
+                return
+
+        # 3. Stream from Edge TTS
+        if voice_id and self.edge_tts_available:
+            try:
+                import edge_tts
+                logger.info(f"🎙️  Streaming Edge TTS for {language} (Voice: {voice_id})")
+                
+                rate_pct = int((speed - 1.0) * 100)
+                rate_str = f"{'+' if rate_pct >= 0 else ''}{rate_pct}%"
+                
+                # collected data in background to cache later
+                audio_buffer = []
+
+                async def _collect_and_yield():
+                    communicate = edge_tts.Communicate(text, voice_id, rate=rate_str)
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio":
+                            audio_buffer.append(chunk["data"])
+                            yield chunk["data"]
+
+                # Run the async generator using a simpler approach
+                def sync_generator():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        gen = _collect_and_yield()
+                        while True:
+                            try:
+                                yield loop.run_until_complete(gen.__anext__())
+                            except StopAsyncIteration:
+                                break
+                    finally:
+                        loop.close()
+
+                for chunk in sync_generator():
+                    yield chunk
+
+                # 4. Save to cache once complete
+                if self.config.ENABLE_CACHE and audio_buffer:
+                    cache_path = self._get_cache_path(text, language, voice_id, speed)
+                    try:
+                        with open(cache_path, "wb") as f:
+                            for chunk in audio_buffer:
+                                f.write(chunk)
+                        logger.info(f"💾 Stream saved to cache: {cache_path}")
+                    except Exception as ce:
+                        logger.warning(f"Could not save stream to cache: {ce}")
+                
+                return
+            except Exception as e:
+                logger.error(f"✗ Edge TTS streaming FAILED: {e}")
+                # Fallback to non-streaming for gTTS if streaming fails
+                pass
+
+        # Fallback: Just use generate_speech and yield in one go if streaming not possible
+        logger.info("Falling back to non-streaming generation for generator...")
+        try:
+            audio_content, _ = self.generate_speech(text, language, speed, voice_id, return_bytes=True)
+            yield audio_content
+        except Exception as e:
+            logger.error(f"All streaming fallbacks failed: {e}")
+            raise
     
     def get_available_languages(self):
         return self.config.SUPPORTED_LANGUAGES
