@@ -75,6 +75,37 @@ def health_check():
             'message': str(e)
         }), 500
 
+@app.route('/api/engine-status', methods=['GET'])
+def engine_status():
+    """Get detailed TTS engine status for diagnostics"""
+    try:
+        engine = get_engine()
+        model_info = engine.get_model_info()
+        
+        status = {
+            'success': True,
+            'engine_info': model_info,
+            'edge_tts_available': engine.edge_tts_available,
+            'edge_tts_via_module': engine.edge_tts_via_module,
+            'offline_available': engine.offline_available,
+            'xtts_available': engine.xtts is not None,
+            'voice_profiles': config.VOICE_PROFILES,
+            'supported_languages': list(config.SUPPORTED_LANGUAGES.keys())
+        }
+        
+        # Add warnings if Edge TTS is not available
+        if not engine.edge_tts_available:
+            status['warning'] = 'Edge TTS (Neural voices) NOT available - using gTTS fallback (robotic voice)'
+            status['recommendation'] = 'Install edge-tts package: pip install edge-tts'
+        
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"Error getting engine status: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/languages', methods=['GET'])
 def get_languages():
     """Get available languages"""
@@ -151,7 +182,9 @@ def process_generate_request(text, lang_code, speed, pitch, gender):
     # Get Voice ID
     voice_id = get_voice_id(lang_code, gender)
     
-    logger.info(f"Generating speech: lang={lang_code}, gender={gender}, voice_id={voice_id}, speed={speed}")
+    logger.info(f"📝 Request: lang={lang_code}, gender={gender}, speed={speed}")
+    logger.info(f"   Voice ID selected: {voice_id}")
+    logger.info(f"   Text length: {len(text)} chars")
     
     # Generate speech (Get bytes)
     engine = get_engine()
@@ -217,6 +250,7 @@ def generate_by_language_and_gender(language_name, gender):
         pitch = int(data.get('pitch', 0))
         
         # URL gender overrides JSON gender if both provided (URL is source of truth here)
+        logger.info(f"🌐 Endpoint: /{language_name}/{gender}/generate")
         
         return process_generate_request(text, lang_code, speed, pitch, gender)
 

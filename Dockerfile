@@ -18,6 +18,9 @@ COPY requirements.txt .
 # XTTS (Coqui) requires specific versions sometimes, but we'll try from requirements
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Verify Edge TTS installation (critical for human-like voices)
+RUN python -m edge_tts --version || echo "WARNING: edge-tts not installed properly!"
+
 # Copy application code
 COPY . .
 

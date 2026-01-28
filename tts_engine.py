@@ -32,26 +32,37 @@ class TTSEngine:
         import shutil
         import sys
         
-        # Method 1: Check CLI
-        self.edge_tts_path = shutil.which("edge-tts")
-        
-        # Method 2: Check in current python environment
-        if not self.edge_tts_path:
-            # Try to see if we can run it via python -m edge_tts
-            try:
-                import subprocess
-                subprocess.run([sys.executable, "-m", "edge_tts", "--version"], capture_output=True, check=True)
-                self.edge_tts_via_module = True
-                self.edge_tts_available = True
-                logger.info(f"Edge TTS (Neural) available via module: {sys.executable} -m edge_tts")
-            except Exception:
-                self.edge_tts_via_module = False
-                self.edge_tts_available = False
-                logger.warning("edge-tts not found in PATH or as module. Human-like voices will not work.")
-        else:
-            self.edge_tts_via_module = False
+        # Method 1: Try importing edge_tts module directly (most reliable)
+        try:
+            import edge_tts
+            self.edge_tts_via_module = True
             self.edge_tts_available = True
-            logger.info(f"Edge TTS (Neural) available via CLI: {self.edge_tts_path}")
+            logger.info(f"✓ Edge TTS (Neural) available via direct import: edge_tts v{edge_tts.__version__ if hasattr(edge_tts, '__version__') else 'unknown'}")
+        except ImportError as e:
+            logger.warning(f"Edge TTS module import failed: {e}")
+            
+            # Method 2: Check CLI
+            self.edge_tts_path = shutil.which("edge-tts")
+            
+            # Method 3: Check in current python environment via subprocess
+            if not self.edge_tts_path:
+                try:
+                    import subprocess
+                    result = subprocess.run([sys.executable, "-m", "edge_tts", "--version"], capture_output=True, check=True, text=True)
+                    self.edge_tts_via_module = True
+                    self.edge_tts_available = True
+                    logger.info(f"✓ Edge TTS (Neural) available via module: {sys.executable} -m edge_tts")
+                    logger.info(f"  Version check output: {result.stdout.strip()}")
+                except Exception as ex:
+                    self.edge_tts_via_module = False
+                    self.edge_tts_available = False
+                    logger.error(f"✗ Edge TTS not found in PATH or as module. Human-like voices will NOT work!")
+                    logger.error(f"  Detection error: {ex}")
+                    logger.error(f"  Install with: pip install edge-tts")
+            else:
+                self.edge_tts_via_module = False
+                self.edge_tts_available = True
+                logger.info(f"✓ Edge TTS (Neural) available via CLI: {self.edge_tts_path}")
 
         # Initialize pyttsx3 for offline TTS
         try:
@@ -109,7 +120,7 @@ class TTSEngine:
                     fd, temp_path = tempfile.mkstemp(suffix=".wav")
                     os.close(fd)
                 
-                logger.info(f"Cloning voice (XTTS) for {language} using {os.path.basename(speaker_wav)}")
+                logger.info(f"🎤 Using XTTS voice cloning for {language} with {os.path.basename(speaker_wav)}")
                 self.xtts.tts_to_file(
                     text=text,
                     file_path=temp_path,
@@ -118,7 +129,7 @@ class TTSEngine:
                     speed=speed,
                     split_sentences=True
                 )
-                logger.info(f"XTTS cloning successful: {temp_path}")
+                logger.info(f"✓ XTTS cloning successful: {temp_path}")
                 
                 if return_bytes:
                     with open(temp_path, "rb") as f:
@@ -128,14 +139,16 @@ class TTSEngine:
                 
                 return temp_path
             except Exception as e:
-                logger.error(f"XTTS generation failed: {e}. Falling back...")
+                logger.error(f"✗ XTTS generation failed: {e}. Falling back to Edge TTS/gTTS...")
         
         # 2. Try Edge TTS (Neural Voices)
         if voice_id and self.edge_tts_available:
             try:
                 import subprocess
                 import sys
-                logger.info(f"Generating human-like speech (Edge TTS) for {language} with voice {voice_id}")
+                logger.info(f"🎙️  Using Edge TTS Neural Voice for {language}")
+                logger.info(f"   Voice ID: {voice_id}")
+                logger.info(f"   Speed: {speed}x")
                 
                 # Calculate rate string (e.g. +10% or -10%)
                 rate_pct = int((speed - 1.0) * 100)
@@ -155,22 +168,27 @@ class TTSEngine:
                 
                 if return_bytes:
                     # No --write-media, capture stdout
-                    logger.info(f"Running command (stdout): {' '.join(cmd)}")
+                    logger.info(f"   Command: {' '.join(cmd[:4])}... (streaming to bytes)")
                     result = subprocess.run(cmd, capture_output=True, check=True)
+                    logger.info(f"✓ Edge TTS generation successful ({len(result.stdout)} bytes)")
                     return result.stdout, "audio/mpeg"
                 else:
                     cmd.extend(["--write-media", output_path])
-                    logger.info(f"Running command: {' '.join(cmd)}")
+                    logger.info(f"   Command: {' '.join(cmd[:6])}...")
                     subprocess.run(cmd, check=True)
-                    logger.info(f"Edge TTS generation successful: {output_path}")
+                    logger.info(f"✓ Edge TTS generation successful: {output_path}")
                     return output_path
                     
             except Exception as e:
-                logger.error(f"Edge TTS generation failed: {e}. Falling back to gTTS...")
+                logger.error(f"✗ Edge TTS generation FAILED: {e}")
+                logger.error(f"   Falling back to gTTS (robotic voice)...")
         
         # Fallback to gTTS (Robotic/Standard)
         try:
-            logger.info(f"Generating standard speech (gTTS) for language: {language}")
+            logger.warning(f"⚠️  Using gTTS fallback (ROBOTIC voice) for language: {language}")
+            if voice_id:
+                logger.warning(f"   Edge TTS was requested (voice_id={voice_id}) but unavailable!")
+            logger.info(f"   This will produce robotic-sounding speech, not human-like.")
             gtts_lang = self._get_gtts_lang_code(language)
             slow = speed < 0.8
             tts = gTTS(text=text, lang=gtts_lang, slow=slow)
