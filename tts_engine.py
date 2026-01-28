@@ -6,6 +6,8 @@ import os
 import logging
 from gtts import gTTS
 import pyttsx3
+import asyncio
+import hashlib
 from config import Config
 from text_utils import normalize_text
 
@@ -73,9 +75,20 @@ class TTSEngine:
         except Exception as e:
             logger.warning(f"Offline TTS not available: {e}")
             self.offline_available = False
-        
+        # Prepare cache directory
+        if self.config.ENABLE_CACHE:
+            os.makedirs(self.config.CACHE_DIR, exist_ok=True)
+            
         logger.info("TTS Engine initialized successfully!")
     
+    def _get_cache_path(self, text, language, voice_id, speed):
+        """Generate a unique cache filename based on request parameters"""
+        # Create a unique key string
+        key_data = f"{text}|{language}|{voice_id}|{speed}"
+        # Use SHA-256 hash for the filename
+        hash_key = hashlib.sha256(key_data.encode()).hexdigest()
+        return os.path.join(self.config.CACHE_DIR, f"{hash_key}.mp3")
+
     def _get_gtts_lang_code(self, language):
         """Map our language codes to gTTS language codes"""
         lang_map = {
@@ -92,22 +105,30 @@ class TTSEngine:
         if not text or len(text.strip()) == 0:
             raise ValueError("Text cannot be empty")
         
-        # --- NEW: Normalize text for better pronunciation ---
+        # --- NEW: Normalization ---
         normalized_text = normalize_text(text, language)
         if normalized_text != text:
-            logger.info(f"📝 Text normalized for pronunciation:")
-            logger.info(f"   Original: {text}")
-            logger.info(f"   Processed: {normalized_text}")
             text = normalized_text
-        # ----------------------------------------------------
         
+        # --- NEW: Caching Check ---
+        if self.config.ENABLE_CACHE:
+            cache_path = self._get_cache_path(text, language, voice_id, speed)
+            if os.path.exists(cache_path):
+                logger.info(f"⚡ Cache hit! Returning pre-generated audio for: {text[:20]}...")
+                with open(cache_path, "rb") as f:
+                    audio_bytes = f.read()
+                if return_bytes:
+                    return audio_bytes, "audio/mpeg"
+                
+                # If path requested but we found in cache, we need to copy to output if different
+                if output_path and output_path != cache_path:
+                    import shutil
+                    shutil.copy2(cache_path, output_path)
+                    return output_path
+                return cache_path
+
         if len(text) > self.config.MAX_TEXT_LENGTH:
             raise ValueError(f"Text too long. Maximum {self.config.MAX_TEXT_LENGTH} characters allowed")
-        
-        # 0. Handle in-memory request setup
-        if return_bytes:
-             # XTTS currently requires file path, so we might need temp file
-             pass
         
         # Generate output path if not provided and not returning bytes
         if output_path is None and not return_bytes:
@@ -121,8 +142,6 @@ class TTSEngine:
         
         # 1. Try XTTS (Zero-Shot Cloning) if speaker_wav provided
         if self.xtts and speaker_wav and os.path.exists(speaker_wav):
-            # XTTS usually works with files. 
-            # If return_bytes requested, we'll write to temp file then read bytes
             try:
                 temp_path = output_path
                 if return_bytes:
@@ -145,6 +164,13 @@ class TTSEngine:
                     with open(temp_path, "rb") as f:
                         audio_bytes = f.read()
                     os.remove(temp_path)
+                    
+                    # Save to cache if enabled
+                    if self.config.ENABLE_CACHE:
+                        cache_path = self._get_cache_path(text, language, voice_id, speed)
+                        with open(cache_path, "wb") as f:
+                            f.write(audio_bytes)
+                            
                     return audio_bytes, "audio/wav"
                 
                 return temp_path
@@ -154,39 +180,41 @@ class TTSEngine:
         # 2. Try Edge TTS (Neural Voices)
         if voice_id and self.edge_tts_available:
             try:
-                import subprocess
-                import sys
-                logger.info(f"🎙️  Using Edge TTS Neural Voice for {language}")
-                logger.info(f"   Voice ID: {voice_id}")
-                logger.info(f"   Speed: {speed}x")
+                import edge_tts
+                logger.info(f"🎙️  Using Edge TTS (Library) for {language}")
                 
-                # Calculate rate string (e.g. +10% or -10%)
+                # Calculate rate string
                 rate_pct = int((speed - 1.0) * 100)
                 rate_str = f"{'+' if rate_pct >= 0 else ''}{rate_pct}%"
                 
-                cmd = []
-                if self.edge_tts_via_module:
-                    cmd = [sys.executable, "-m", "edge_tts"]
-                else:
-                    cmd = [self.edge_tts_path]
-                    
-                cmd.extend([
-                    "--text", text,
-                    "--voice", voice_id,
-                    "--rate", rate_str
-                ])
+                # Run async call in sync context
+                async def _generate_edge():
+                    communicate = edge_tts.Communicate(text, voice_id, rate=rate_str)
+                    audio_data = b""
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio":
+                            audio_data += chunk["data"]
+                    return audio_data
+
+                audio_content = asyncio.run(_generate_edge())
                 
+                if not audio_content:
+                    raise Exception("No audio generated by edge-tts")
+
+                # Save to cache if enabled
+                if self.config.ENABLE_CACHE:
+                    cache_path = self._get_cache_path(text, language, voice_id, speed)
+                    with open(cache_path, "wb") as f:
+                        f.write(audio_content)
+                    logger.info(f"💾 Saved to cache: {cache_path}")
+
                 if return_bytes:
-                    # No --write-media, capture stdout
-                    logger.info(f"   Command: {' '.join(cmd[:4])}... (streaming to bytes)")
-                    result = subprocess.run(cmd, capture_output=True, check=True)
-                    logger.info(f"✓ Edge TTS generation successful ({len(result.stdout)} bytes)")
-                    return result.stdout, "audio/mpeg"
+                    logger.info(f"✓ Edge TTS successful ({len(audio_content)} bytes)")
+                    return audio_content, "audio/mpeg"
                 else:
-                    cmd.extend(["--write-media", output_path])
-                    logger.info(f"   Command: {' '.join(cmd[:6])}...")
-                    subprocess.run(cmd, check=True)
-                    logger.info(f"✓ Edge TTS generation successful: {output_path}")
+                    with open(output_path, "wb") as f:
+                        f.write(audio_content)
+                    logger.info(f"✓ Edge TTS successful: {output_path}")
                     return output_path
                     
             except Exception as e:
