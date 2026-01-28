@@ -7,6 +7,7 @@ import logging
 from gtts import gTTS
 import pyttsx3
 from config import Config
+from text_utils import normalize_text
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -90,6 +91,15 @@ class TTSEngine:
         """
         if not text or len(text.strip()) == 0:
             raise ValueError("Text cannot be empty")
+        
+        # --- NEW: Normalize text for better pronunciation ---
+        normalized_text = normalize_text(text, language)
+        if normalized_text != text:
+            logger.info(f"📝 Text normalized for pronunciation:")
+            logger.info(f"   Original: {text}")
+            logger.info(f"   Processed: {normalized_text}")
+            text = normalized_text
+        # ----------------------------------------------------
         
         if len(text) > self.config.MAX_TEXT_LENGTH:
             raise ValueError(f"Text too long. Maximum {self.config.MAX_TEXT_LENGTH} characters allowed")
